@@ -1,0 +1,188 @@
+/* SQL Script for SCD type 2 for Chinook */
+
+USE [ChinookStaging] 
+GO
+declare @etl_date AS date ='2013-12-22' ;
+/* New Staging for Employee */
+
+TRUNCATE TABLE [ChinookStaging].[dbo].[Employee];
+
+INSERT INTO [dbo].[Employee](
+[EmployeeId],[LastName],[FirstName],[Title],[ReportsTo],[BirthDate],[HireDate],[Address],[City],[State],[Country],[PostalCode],
+[Phone],[Fax],[Email])
+
+SELECT [EmployeeId],[LastName],[FirstName],[Title],[ReportsTo],[BirthDate],[HireDate],[Address],[City],[State],[Country],[PostalCode],
+[Phone],[Fax],[Email]
+FROM [Chinook].[dbo].[Employee]
+;
+
+/* New Staging for Customer */ 
+
+TRUNCATE TABLE [ChinookStaging].[dbo].[Customer];
+
+INSERT INTO [dbo].[Customer](
+[CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Phone],[Fax],[Email],[SupportRepId]
+)
+
+SELECT [CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Phone],[Fax],[Email],[SupportRepId]
+
+FROM [Chinook].[dbo].[Customer];
+
+/* New Staging for Track */
+TRUNCATE TABLE [ChinookStaging].[dbo].[Track];
+
+INSERT INTO [ChinookStaging].[dbo].[Track](
+[TrackId],[TrackName],[AlbumTitle],[ArtistName],[MediaTypeName],[GenreName],[Composer],[Milliseconds],[Bytes]
+)
+
+SELECT t.TrackId,
+	   t.[Name] 
+      ,a.[Title] 
+	  ,artist.[Name]  
+      ,mt.[Name] 
+      ,g.[Name] 
+      ,t.[Composer]
+      ,t.[Milliseconds]
+      ,t.[Bytes]
+--	  ,p.[Name] as PlayListName 
+
+FROM [Chinook].[dbo].[Track] t
+INNER JOIN Chinook.[dbo].[Album] a ON a.AlbumId = t.AlbumId 
+INNER JOIN Chinook.[dbo].[Artist] artist ON artist.ArtistId = a.ArtistId
+
+INNER JOIN [Chinook].[dbo].[MediaType] mt ON mt.MediaTypeId=t.MediaTypeId
+
+INNER JOIN [Chinook].[dbo].[Genre] g ON g.GenreId = t.GenreId 
+/*
+INNER JOIN Chinook.[dbo].[PlaylistTrack] plt ON plt.TrackId = t.TrackId
+INNER JOIN [Chinook].[dbo].[Playlist] p ON p.PlaylistId = plt.PlaylistId ;
+*/
+
+/* New Staging For Sales */ 
+
+
+TRUNCATE TABLE [ChinookStaging].[dbo].[Sales];
+INSERT INTO [ChinookStaging].[dbo].[Sales] (
+[TrackId],[InvoiceId],[CustomerId],[EmployeeId],[InvoiceDate],[UnitPrice],[Quantity]
+)
+
+SELECT il.[TrackId]      -- productID
+      ,i.[InvoiceId]     -- the order (timologio)
+      ,i.[CustomerId]    -- the customer that made the order
+	  ,e.[EmployeeId]    --the employee who helped the customer for the order
+      ,i.[InvoiceDate]   -- the date
+      ,il.[UnitPrice]    -- track price
+      ,il.[Quantity]     -- track quantity - always 1
+
+FROM [Chinook].[dbo].[Invoice] i
+INNER JOIN [Chinook].[dbo].[InvoiceLine] il ON il.InvoiceId = i.InvoiceId
+INNER JOIN [Chinook].[dbo].[Customer] c ON c.CustomerId = i.CustomerId
+INNER JOIN [Chinook].[dbo].[Employee] e ON e.EmployeeId = c.SupportRepId 
+
+WHERE CAST(i.[InvoiceDate] as date) >= @etl_date;
+
+/*  SCD for Employee of the ChinookDB */
+DROP TABLE IF EXISTS [ChinookStaging].[dbo].[Staging_DimEmployee];
+
+CREATE TABLE [Staging_DimEmployee] (
+    EmployeeKey INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    EmployeeId INT NOT NULL,
+    EmployeeName VARCHAR(40) NOT NULL,
+    EmployeeTitle VARCHAR(40) NOT NULL,
+	EmployeeManagerName VARCHAR(40) NOT NULL,
+	EmployeeBirthDate DATE NOT NULL,
+    [HireDate] DATE NOT NULL,
+    [EmployeeAddress] NVARCHAR(70) NOT NULL,
+    [EmployeeCity] NVARCHAR(40) NOT NULL,
+    [EmployeeState] NVARCHAR(40) DEFAULT 'N/A' NOT NULL,
+    [EmployeeCountry] NVARCHAR(40) NOT NULL,
+    [EmployeePostalCode] NVARCHAR(10) DEFAULT 'N/A' NOT NULL,
+    [EmployeePhone] NVARCHAR(24) NOT NULL,
+    [EmployeeFax] NVARCHAR(24) DEFAULT 'N/A' NOT NULL,
+    [EmployeeEmail] NVARCHAR(60) NOT NULL,
+    RowIsCurrent INT DEFAULT 1 NOT NULL,
+    RowStartDate DATE DEFAULT '2009-01-01' NOT NULL,
+    RowEndDate DATE DEFAULT '9999-12-31' NOT NULL,
+    RowChangeReason VARCHAR(200) NULL
+);
+
+INSERT INTO [ChinookStaging].[dbo].[Staging_DimEmployee] (
+	EmployeeKey,
+    EmployeeId ,
+    EmployeeName ,
+    EmployeeTitle ,
+	EmployeeManagerName ,
+	EmployeeBirthDate ,
+    [HireDate] ,
+    [EmployeeAddress] ,
+    [EmployeeCity] ,
+    [EmployeeState],
+    [EmployeeCountry] ,
+    [EmployeePostalCode] ,
+    [EmployeePhone] ,
+    [EmployeeFax],
+    [EmployeeEmail]
+)
+SELECT e1.EmployeeID, e1.[FirstName] + ' ' + e1.[LastName], e1.Title, COALESCE(manager.[FirstName]+' '+manager.[LastName],'N/A') , CAST (e1.[BirthDate] as DATE) , CAST (e1.[HireDate] as DATE),
+	e1.[Address] , e1.[City] , COALESCE(e1.[State],'N/A') , e1.[Country], COALESCE(e1.[PostalCode],'N/A') ,e1.[Phone] , COALESCE(e1.[Fax],'N/A') ,e1.[Email],  CAST (e1.[HireDate] as DATE)
+
+FROM ChinookStaging.dbo.Employee e1
+LEFT JOIN ChinookStaging.dbo.Employee manager ON manager.[EmployeeId] = e1.[ReportsTo];
+
+/* REMOVE THE CONSTRAINTS IN DATA WAREHOUSE TO USE MERGE */ 
+ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimCustomer];
+
+ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimDateInvoice];
+
+ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimEmployee];
+
+ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimTrack] ;
+
+
+INSERT INTO [ChinookDW].[dbo].[DimEmployee](
+	EmployeeID, EmployeeName, EmployeeTitle, EmployeeManagerName, EmployeeBirthDate, HireDate,
+	EmployeeAddress, EmployeeCity, EmployeeState, EmployeeCountry, EmployeePostalCode, EmployeePhone, EmployeeFax,
+	EmployeeEmail, RowStartDate, RowChangeReason
+)
+SELECT
+	EmployeeID, EmployeeName, EmployeeTitle, EmployeeManagerName, EmployeeBirthDate, HireDate,
+	EmployeeAddress, EmployeeCity, EmployeeState, EmployeeCountry, EmployeePostalCode, EmployeePhone, EmployeeFax,
+	EmployeeEmail,  @etl_date	  , ActionName
+
+FROM(
+
+MERGE [ChinookDW].[dbo].[DimEmployee] as target
+USING [ChinookStaging].[dbo].[Staging_DimEmployee] as source
+ON target.[EmployeeId] = source.[EmployeeId]
+
+WHEN MATCHED  AND target.[RowIsCurrent]=1 AND (source.EmployeeCity <> target.EmployeeCity OR source.EmployeePhone<>target.EmployeePhone OR source.EmployeeEmail<>target.EmployeeEmail
+OR source.EmployeeTitle<>target.EmployeeTitle OR source.EmployeeManagerName<>target.EmployeeManagerName)
+
+THEN UPDATE SET
+target.RowIsCurrent = 0,
+target.RowEndDate = dateadd(day, -1, @etl_date ) ,
+target.RowChangeReason = 'UPDATED NOT CURRENT'
+
+WHEN NOT MATCHED THEN
+	INSERT (EmployeeID, EmployeeName, EmployeeTitle, EmployeeManagerName, EmployeeBirthDate, HireDate,
+	EmployeeAddress, EmployeeCity, EmployeeState, EmployeeCountry, EmployeePostalCode, EmployeePhone, EmployeeFax,
+	EmployeeEmail,  RowStartDate,   RowChangeReason
+	)
+	VALUES(source.EmployeeID, source.EmployeeName,source.EmployeeTitle, source.EmployeeManagerName, source.EmployeeBirthDate, source.HireDate,
+	source.EmployeeAddress, source.EmployeeCity, source.EmployeeState, source.EmployeeCountry, source.EmployeePostalCode, source.EmployeePhone, source.EmployeeFax,
+	source.EmployeeEmail,  @etl_date,  'NEW_RECORD' )
+
+WHEN NOT MATCHED BY Source THEN
+	UPDATE SET
+	 target.RowEndDate= dateadd(day, -1, @etl_date)
+	,target.RowIsCurrent = 0
+	,target.RowChangeReason  = 'FIRED/RESIGNED'
+OUTPUT
+	source.EmployeeID, source.EmployeeName,source.EmployeeTitle, source.EmployeeManagerName, source.EmployeeBirthDate, source.HireDate,
+	source.EmployeeAddress, source.EmployeeCity, source.EmployeeState, source.EmployeeCountry, source.EmployeePostalCode, source.EmployeePhone, source.EmployeeFax,
+	source.EmployeeEmail,$Action as ActionName
+	
+
+) as MrgEmpl
+WHERE MrgEmpl.ActionName = 'UPDATE' AND [EmployeeId] IS NOT NULL;
+
