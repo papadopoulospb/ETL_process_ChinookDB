@@ -21,10 +21,10 @@ FROM [Chinook].[dbo].[Employee]
 TRUNCATE TABLE [ChinookStaging].[dbo].[Customer];
 
 INSERT INTO [dbo].[Customer](
-[CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Phone],[Fax],[Email],[SupportRepId]
+[CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Fax],[Email],[SupportRepId]
 )
 
-SELECT [CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Phone],[Fax],[Email],[SupportRepId]
+SELECT [CustomerId],[FirstName],[LastName],[Company],[Address],[City],[State],[Country],[PostalCode],[Phone],[Fax],[Email],[SupportRepId]
 
 FROM [Chinook].[dbo].[Customer];
 
@@ -107,7 +107,7 @@ CREATE TABLE [Staging_DimEmployee] (
 );
 
 INSERT INTO [ChinookStaging].[dbo].[Staging_DimEmployee] (
-	EmployeeKey,
+	--EmployeeKey,
     EmployeeId ,
     EmployeeName ,
     EmployeeTitle ,
@@ -124,12 +124,13 @@ INSERT INTO [ChinookStaging].[dbo].[Staging_DimEmployee] (
     [EmployeeEmail]
 )
 SELECT e1.EmployeeID, e1.[FirstName] + ' ' + e1.[LastName], e1.Title, COALESCE(manager.[FirstName]+' '+manager.[LastName],'N/A') , CAST (e1.[BirthDate] as DATE) , CAST (e1.[HireDate] as DATE),
-	e1.[Address] , e1.[City] , COALESCE(e1.[State],'N/A') , e1.[Country], COALESCE(e1.[PostalCode],'N/A') ,e1.[Phone] , COALESCE(e1.[Fax],'N/A') ,e1.[Email],  CAST (e1.[HireDate] as DATE)
+	e1.[Address] , e1.[City] , COALESCE(e1.[State],'N/A') , e1.[Country], COALESCE(e1.[PostalCode],'N/A') ,e1.[Phone] , COALESCE(e1.[Fax],'N/A') ,e1.[Email]
 
 FROM ChinookStaging.dbo.Employee e1
 LEFT JOIN ChinookStaging.dbo.Employee manager ON manager.[EmployeeId] = e1.[ReportsTo];
 
 /* REMOVE THE CONSTRAINTS IN DATA WAREHOUSE TO USE MERGE */ 
+/*
 ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimCustomer];
 
 ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimDateInvoice];
@@ -137,7 +138,8 @@ ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimDateInvoi
 ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimEmployee];
 
 ALTER TABLE [ChinookDW].[dbo].[FactSales] DROP CONSTRAINT [FactSalesDimTrack] ;
-
+*/
+/* Update - Insert - Delete rows in DimEmployee */
 
 INSERT INTO [ChinookDW].[dbo].[DimEmployee](
 	EmployeeID, EmployeeName, EmployeeTitle, EmployeeManagerName, EmployeeBirthDate, HireDate,
@@ -186,3 +188,222 @@ OUTPUT
 ) as MrgEmpl
 WHERE MrgEmpl.ActionName = 'UPDATE' AND [EmployeeId] IS NOT NULL;
 
+
+/*  SCD for Customer of the ChinookDB */
+DROP TABLE IF EXISTS [ChinookStaging].[dbo].[Staging_DimCustomer];
+
+CREATE TABLE [Staging_DimCustomer] (
+    CustomerKey INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    CustomerId INT NOT NULL,
+    CustomerFullName VARCHAR(60) NOT NULL,
+    CustomerCompany VARCHAR(80) DEFAULT 'N/A' NOT NULL,
+	CustomerAddress NVARCHAR(70) NOT NULL,
+    CustomerCity NVARCHAR(40) NOT NULL,
+    [CustomerState] NVARCHAR(40) NOT NULL,
+    [CustomerCountry] NVARCHAR(40) NOT NULL,
+    [CustomerPostalCode] NVARCHAR(10) DEFAULT 'N/A' NOT NULL,
+    [CustomerFax] NVARCHAR(24) DEFAULT 'N/A' NOT NULL,
+	[CustomerEmail] NVARCHAR(60) NOT NULL,
+    [SupportBy] VARCHAR(40) NOT NULL,
+    RowIsCurrent INT DEFAULT 1 NOT NULL,
+    RowStartDate DATE DEFAULT '2009-01-01' NOT NULL,
+    RowEndDate DATE DEFAULT '9999-12-31' NOT NULL,
+    RowChangeReason VARCHAR(200) NULL
+);
+
+INSERT INTO [ChinookStaging].[dbo].[Staging_DimCustomer] (
+    CustomerId ,
+    CustomerFullName ,
+    CustomerCompany ,
+	CustomerAddress ,
+    CustomerCity ,
+    [CustomerState] ,
+    [CustomerCountry] ,
+    [CustomerPostalCode] ,
+    [CustomerFax] ,
+	[CustomerEmail] ,
+    [SupportBy] 
+)
+SELECT c.CustomerID, c.[FirstName]+' '+c.[LastName], COALESCE([Company],'N/A') , c.[Address], c.[City], COALESCE(c.[State], 'N/A') , c.[Country],
+	COALESCE(c.[PostalCode],'N/A') , COALESCE(c.[Fax] , 'N/A') , c.[Email] , e.FirstName+' '+e.LastName
+
+    FROM ChinookStaging.dbo.Customer c
+	INNER JOIN ChinookStaging.dbo.Employee as e ON c.SupportRepId=e.EmployeeId
+	
+/* Update - Insert - Delete rows in DimCustomer */
+INSERT INTO [ChinookDW].[dbo].[DimCustomer](
+	CustomerId ,
+    CustomerFullName ,
+    CustomerCompany ,
+	CustomerAddress ,
+    CustomerCity ,
+    [CustomerState] ,
+    [CustomerCountry] ,
+    [CustomerPostalCode] ,
+    [CustomerFax] ,
+	[CustomerEmail] ,
+    [SupportBy], RowStartDate, RowChangeReason
+)
+SELECT
+	CustomerId ,
+    CustomerFullName ,
+    CustomerCompany ,
+	CustomerAddress ,
+    CustomerCity ,
+    [CustomerState] ,
+    [CustomerCountry] ,
+    [CustomerPostalCode] ,
+    [CustomerFax] ,
+	[CustomerEmail] ,
+    [SupportBy],  @etl_date	  , ActionNameCustomer
+
+FROM(
+
+MERGE [ChinookDW].[dbo].[DimCustomer] as target
+USING [ChinookStaging].[dbo].[Staging_DimCustomer] as source
+ON target.[CustomerId] = source.[CustomerId]
+
+WHEN MATCHED  AND target.[RowIsCurrent]=1 AND (source.CustomerAddress <> target.CustomerAddress OR source.CustomerCity<>target.CustomerCity OR source.CustomerEmail<>target.CustomerEmail
+OR source.CustomerCompany<>target.CustomerCompany OR source.CustomerCountry<>target.CustomerCountry OR source.[SupportBy]<>target.[SupportBy] )
+
+THEN UPDATE SET
+target.RowIsCurrent = 0,
+target.RowEndDate = dateadd(day, -1, @etl_date ) ,
+target.RowChangeReason = 'UPDATED NOT CURRENT'
+
+WHEN NOT MATCHED THEN
+	INSERT (CustomerId ,
+    CustomerFullName ,
+    CustomerCompany ,
+	CustomerAddress ,
+    CustomerCity ,
+    [CustomerState] ,
+    [CustomerCountry] ,
+    [CustomerPostalCode] ,
+    [CustomerFax] ,
+	[CustomerEmail] ,
+    [SupportBy],  RowStartDate,   RowChangeReason
+	)
+	VALUES(source.CustomerId, source.CustomerFullName,source.CustomerCompany, source.CustomerAddress, source.CustomerCity, source.CustomerState,
+	source.CustomerCountry, source.CustomerPostalCode, source.CustomerFax, source.CustomerEmail, source.SupportBy,  @etl_date,  'NEW_RECORD' )
+
+WHEN NOT MATCHED BY Source THEN
+	UPDATE SET
+	 target.RowEndDate= dateadd(day, -1, @etl_date)
+	,target.RowIsCurrent = 0
+	,target.RowChangeReason  = 'SOFT DELETE'
+OUTPUT
+	source.CustomerId, source.CustomerFullName,source.CustomerCompany, source.CustomerAddress, source.CustomerCity, source.CustomerState,
+	source.CustomerCountry, source.CustomerPostalCode, source.CustomerFax, source.CustomerEmail, source.SupportBy,$Action as ActionNameCustomer
+	
+
+) as MrgCust
+WHERE MrgCust.ActionNameCustomer = 'UPDATE' AND [CustomerId] IS NOT NULL;
+
+
+
+
+DROP TABLE IF EXISTS [ChinookStaging].[dbo].[Staging_DimTrack];
+
+CREATE TABLE Staging_DimTrack( 
+	TrackKey INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+	TrackId INT NOT NULL,
+	[TrackName] NVARCHAR(200) NOT NULL,
+	[AlbumTitle] NVARCHAR(160) NOT NULL,
+	[ArtistName] NVARCHAR(120) NOT NULL,
+	[MediaTypeName] NVARCHAR(120) NOT NULL,
+	[GenreName] NVARCHAR(120) NOT NULL,
+	[Composer] NVARCHAR(220) NOT NULL,
+	[Milliseconds] INT NOT NULL,
+	[Bytes] INT NOT NULL,
+	--[PlayListName] NVARCHAR(120) NOT NULL, -- Must configure many-to-many relationship . Star schema does not allow this, instead we need snowflake.
+	RowIsCurrent INT DEFAULT 1 NOT NULL,
+    RowStartDate DATE DEFAULT '2009-01-01' NOT NULL,
+    RowEndDate DATE DEFAULT '9999-12-31' NOT NULL,
+    RowChangeReason VARCHAR(200) NULL
+);
+
+
+
+
+INSERT INTO [ChinookStaging].[dbo].[Staging_DimTrack] (
+    [TrackID], [TrackName], [AlbumTitle], [ArtistName], [MediaTypeName], [GenreName],[Composer],[Milliseconds],[Bytes] 
+)
+SELECT [TrackId],[TrackName],[AlbumTitle],[ArtistName],[MediaTypeName],[GenreName],COALESCE([Composer],'N/A'),[Milliseconds],[Bytes]
+-- PlayListName 
+
+FROM [ChinookStaging].[dbo].[Track]
+
+/*
+INNER JOIN Chinook.[dbo].[Album] a ON a.AlbumId = t.AlbumId 
+INNER JOIN Chinook.[dbo].[Artist] artist ON artist.ArtistId = a.ArtistId
+
+INNER JOIN [Chinook].[dbo].[MediaType] mt ON mt.MediaTypeId=t.MediaTypeId
+
+INNER JOIN [Chinook].[dbo].[Genre] g ON g.GenreId = t.GenreId 
+
+
+INNER JOIN Chinook.[dbo].[PlaylistTrack] plt ON plt.TrackId = t.TrackId
+INNER JOIN [Chinook].[dbo].[Playlist] p ON p.PlaylistId = plt.PlaylistId ;
+*/
+
+/* Update - Insert - Delete rows in DimTrack*/
+
+
+INSERT INTO [ChinookDW].[dbo].[DimTrack](
+	[TrackID], [TrackName], [AlbumTitle], [ArtistName], [MediaTypeName], [GenreName],[Composer],[Milliseconds],[Bytes], RowStartDate, RowChangeReason
+)
+SELECT
+	[TrackID], [TrackName], [AlbumTitle], [ArtistName], [MediaTypeName], [GenreName],[Composer],[Milliseconds],[Bytes] ,  @etl_date	  , ActionNameTrack
+
+FROM(
+
+MERGE [ChinookDW].[dbo].[DimTrack] as target
+USING [ChinookStaging].[dbo].[Staging_DimTrack] as source
+ON target.[TrackId] = source.[TrackId]
+
+WHEN MATCHED  AND target.[RowIsCurrent]=1 
+/*AND (source.CustomerAddress <> target.CustomerAddress OR source.CustomerCity<>target.CustomerCity OR source.CustomerEmail<>target.CustomerEmail
+OR source.CustomerCompany<>target.CustomerCompany OR source.CustomerCountry<>target.CustomerCountry OR source.[SupportBy]<>target.[SupportBy] )*/
+
+THEN UPDATE SET
+target.RowIsCurrent = 0,
+target.RowEndDate = dateadd(day, -1, @etl_date ) ,
+target.RowChangeReason = 'UPDATED NOT CURRENT'
+
+WHEN NOT MATCHED THEN
+	INSERT ([TrackID], [TrackName], [AlbumTitle], [ArtistName], [MediaTypeName], [GenreName],[Composer],[Milliseconds],[Bytes] ,  RowStartDate,   RowChangeReason
+	)
+	VALUES(source.TrackId, source.TrackName,source.AlbumTitle, source.ArtistName, source.MediaTypeName, source.GenreName,
+	source.Composer, source.Milliseconds, source.Bytes,  @etl_date,  'NEW_RECORD' )
+
+WHEN NOT MATCHED BY Source THEN
+	UPDATE SET
+	 target.RowEndDate= dateadd(day, -1, @etl_date)
+	,target.RowIsCurrent = 0
+	,target.RowChangeReason  = 'SOFT DELETE'
+OUTPUT
+	source.TrackId, source.TrackName,source.AlbumTitle, source.ArtistName, source.MediaTypeName, source.GenreName,
+	source.Composer, source.Milliseconds, source.Bytes,$Action as ActionNameTrack
+	
+
+) as MrgTrack
+WHERE MrgTrack.ActionNameTrack = 'UPDATE' AND [TrackId] IS NOT NULL;
+
+/* Insert New Facts */
+
+INSERT INTO [ChinookDW].[dbo].FactSales(
+[TrackKey],[EmployeeKey],[CustomerKey],[InvoiceDateKey],[InvoiceID],[UnitPrice],[Quantity],[PartialAmount]
+)
+SELECT  t.[TrackKey] , e.[EmployeeKey], c.[CustomerKey], 
+CAST(FORMAT([InvoiceDate],'yyyyMMdd') AS INT), 
+[InvoiceID], [UnitPrice], [Quantity], [UnitPrice]*[Quantity]
+
+FROM ChinookStaging.dbo.Sales s
+INNER JOIN  ChinookDW.dbo.DimTrack t ON s.TrackId = t.TrackId AND t.RowIsCurrent=1
+INNER JOIN ChinookDW.dbo.DimEmployee e ON e.EmployeeId=s.EmployeeId AND e.RowIsCurrent=1
+INNER JOIN ChinookDW.dbo.DimCustomer c ON c.CustomerId = s.CustomerId AND c.RowIsCurrent=1
+
+
+
+/* !!! DON'T FORGET TO MAKE RELATIONSHIPS AGAIN IN DATA WAREHOUSE !!! */
