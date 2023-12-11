@@ -15,6 +15,16 @@ Country = 'Greece',
 PostalCode='1111'
 WHERE EmployeeId=2 ;
 
+/* Update Employee with EmployeeId=2 */
+UPDATE [dbo].[Employee] SET 
+Title = 'Data Analyst' ,
+ReportsTo = 1,
+City='Athens',
+State='Athens',
+Country = 'Greece',
+PostalCode='1111'
+WHERE EmployeeId=3 ;
+
 SELECT * FROM [dbo].[Employee] WHERE [EmployeeId]=2 ; 
 
 /* Insert Employee */
@@ -34,6 +44,22 @@ INSERT INTO [dbo].[Employee] ([EmployeeId],[LastName]
       ,[Fax]
       ,[Email])
 VALUES(9,'Cruise', 'Tom','Business Analyst',1,'1980-01-01','2013-12-23 00:00:00.000','Smith 70','NY',NULL,'USA',NULL,'1234',NULL,'cruise@cruise.com');
+
+INSERT INTO [dbo].[Employee] ([EmployeeId],[LastName]
+      ,[FirstName]
+      ,[Title]
+      ,[ReportsTo]
+      ,[BirthDate]
+      ,[HireDate]
+      ,[Address]
+      ,[City]
+      ,[State]
+      ,[Country]
+      ,[PostalCode]
+      ,[Phone]
+      ,[Fax]
+      ,[Email])
+VALUES(10,'Stark', 'Tony','Mechanical Engineer',1,'1980-01-01','2013-12-23 00:00:00.000','Smith 70','NY',NULL,'USA',NULL,'1234',NULL,'cruise@cruise.com');
 
 
 
