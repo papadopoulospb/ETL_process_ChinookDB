@@ -15,7 +15,7 @@ Country = 'Greece',
 PostalCode='1111'
 WHERE EmployeeId=2 ;
 
-/* Update Employee with EmployeeId=2 */
+
 UPDATE [dbo].[Employee] SET 
 Title = 'Data Analyst' ,
 ReportsTo = 1,
@@ -59,7 +59,7 @@ INSERT INTO [dbo].[Employee] ([EmployeeId],[LastName]
       ,[Phone]
       ,[Fax]
       ,[Email])
-VALUES(10,'Stark', 'Tony','Mechanical Engineer',1,'1980-01-01','2013-12-23 00:00:00.000','Smith 70','NY',NULL,'USA',NULL,'1234',NULL,'cruise@cruise.com');
+VALUES(10,'Stark', 'Tony','Mechanical Engineer',1,'1980-01-01','2013-12-23 00:00:00.000','Smith 70','NY',NULL,'USA',NULL,'1234',NULL,'tony@stark.com');
 
 
 
@@ -67,9 +67,11 @@ SELECT * FROM [dbo].[Employee] ;
 
 /* Insert new Invoice */
 
-INSERT INTO [dbo].[Invoice]([InvoiceId],[CustomerId],[InvoiceDate],[Total])
-VALUES(413 , 1 , '2013-12-24', 2.97 );
-declare  @InsertedInvoice int =413;
+--INSERT INTO [dbo].[Invoice]([InvoiceId],[CustomerId],[InvoiceDate],[Total])
+--VALUES(413 , 1 , '2013-12-24', 2.97 );
+declare  @InsertedInvoice int =(select max(InvoiceId)+1 from Invoice);
+INSERT INTO [dbo].[Invoice](InvoiceId,[CustomerId],[InvoiceDate],[Total])
+VALUES(@InsertedInvoice, 1 , '2013-12-24', 2.97 );
 
 
 --SELECT * FROM [dbo].[Invoice] WHERE [InvoiceDate]>='2013-12-22 00:00:00.000'

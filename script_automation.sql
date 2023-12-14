@@ -15,7 +15,7 @@ This is a script file in SQLCMD_MODE to run a set of sql scripts for
 */
 
 
-/*In line 13 set your own path in variable ScriptPath*/
+/*In line 19 set your own path in variable ScriptPath*/
 :setvar ScriptPath "C:\Users\User\Documents\BI_DataEngineering\Project_Chinook\Chinook_ETL_process"
 
 
