@@ -19,8 +19,8 @@ The data warehouse is implemented so that the relationship between the dimension
 > [!NOTE]
 > 1. Before executing the **SCD_Type2_Chinook.sql**, which is the script that making changes in data warehouse,
 > it is necessary to remove the relationships between the dimension tables and the fact table, even for future changes.
-> 2. As the scripts as not intented for end-users , it is crusial when executing them to set the appropriate etl_date variable inside
-> the **2.CreateDimDate_ChinookDW.sql** and **SCD_Type2_Chinook.sql** scripts.
+> 2. It is crusial when executing the scripts to set the appropriate *start_date* and *end_date* variable inside
+> the **2.CreateDimDate_ChinookDW.sql** and *etl_date* in the **SCD_Type2_Chinook.sql** scripts.
 
 
 > [!IMPORTANT]
