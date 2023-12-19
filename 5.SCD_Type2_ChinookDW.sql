@@ -362,7 +362,7 @@ MERGE [ChinookDW].[dbo].[DimTrack] as target
 USING [ChinookStaging].[dbo].[Staging_DimTrack] as source
 ON target.[TrackId] = source.[TrackId]
 
-WHEN MATCHED  AND target.[RowIsCurrent]=1 
+WHEN MATCHED  AND target.[RowIsCurrent]=1 AND target.TrackName<>source.TrackName
 /*AND (source.CustomerAddress <> target.CustomerAddress OR source.CustomerCity<>target.CustomerCity OR source.CustomerEmail<>target.CustomerEmail
 OR source.CustomerCompany<>target.CustomerCompany OR source.CustomerCountry<>target.CustomerCountry OR source.[SupportBy]<>target.[SupportBy] )*/
 
